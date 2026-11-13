@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A Gincana da Tabuada (VR)</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0b1730;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  #ui{position:absolute;left:12px;right:12px;bottom:14px;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+  #vrbtn{pointer-events:auto;font-size:18px;font-weight:700;padding:12px 26px;border-radius:999px;border:2px solid #fff;background:#1f6feb;color:#fff;cursor:pointer}
+  #vrbtn:disabled{background:#555;border-color:#888;cursor:default}
+  #msg{color:#dbe9ff;font-size:13px;background:rgba(0,0,0,.45);padding:6px 12px;border-radius:8px;text-align:center;max-width:560px}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}
+</script>
+</head>
+<body>
+<div id="ui">
+  <button id="vrbtn" disabled>Verificando VR…</button>
+  <div id="msg">No computador ou celular, clique/toque nos botões. No Meta Quest, toque em “Entrar em VR”.</div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+
+/* =====================================================================
+   ROTEIRO — A Gincana do 6º ano
+   Falas: "B:" Bia · "C:" Caio · "P:" Prof. Marcos (sem prefixo = Bia)
+   Problemas: g grupos de p itens (g × p); unit = o que está sendo contado.
+   ===================================================================== */
+const PASS = 8;     // acertos (de 10) para passar de fase
+const TOTAL = 10;
+const PHASES = [2,3,4,5,6,7,8,9,10,0];   // 0 = desafio final (misturada)
+const LAST = PHASES.length-1;
+
+const CHAPTERS = [
+ { title:'A missão', scenery:'pista',
+   intro:['P: Bom dia, turma! A Gincana da escola está chegando.','P: Bia, você vai ser a organizadora. E o Caio vai te ajudar.','B: Oba! Mas… vou precisar de ajuda com as contas.','C: Relaxa! Quem está de óculos vai ajudar a gente. Cada resposta certa libera a próxima cena!'],
+   problems:[
+    {text:'Na corrida de sacos, os alunos vão correr em duplas. São 8 duplas. Quantos alunos vão correr?', g:8,p:2,kind:'person',unit:'alunos'},
+    {text:'Cada pista precisa de 2 cones. Temos 7 pistas. Quantos cones vamos usar?', g:7,p:2,kind:'cone',unit:'cones'},
+    {text:'Cada dupla ganha 2 garrafinhas de água. Para 9 duplas, quantas garrafinhas?', g:9,p:2,kind:'bottle',unit:'garrafinhas'}],
+   beats:[['C: Olha eles chegando na pista! 16 corredores. 🏃','B: Agora vamos montar as pistas com os cones.'],['P: Pistas prontas! Falta a água dos corredores.']],
+   win:['P: Excelente! A primeira prova está pronta. 🎉','B: Na próxima fase, vamos montar o revezamento!'] },
+ { title:'O revezamento', scenery:'pista',
+   intro:['P: Agora é o revezamento! Cada equipe tem 3 corredores.','C: Eu quero correr a última volta!'],
+   problems:[
+    {text:'Inscreveram-se 6 equipes com 3 corredores cada. Quantos corredores no total?', g:6,p:3,kind:'person',unit:'corredores'},
+    {text:'Cada corredor dá 3 voltas na pista. Quantas voltas dão 7 corredores juntos?', g:7,p:3,kind:'star',unit:'voltas'},
+    {text:'Minha equipe treinou 3 vezes por semana durante 9 semanas. Quantos treinos foram?', g:9,p:3,kind:'star',unit:'treinos'}],
+   beats:[['B: 18 corredores! A pista vai ficar cheia. 😄'],['C: Ufa, quanta volta! Cansei só de pensar.']],
+   win:['P: Revezamento organizado! 🏅','B: Próxima parada: o lanche!'] },
+ { title:'O lanche', scenery:'cantina',
+   intro:['B: Hora de organizar o lanche!','C: Minha parte preferida! Cada mesa tem 4 cadeiras.'],
+   problems:[
+    {text:'Vamos montar 8 mesas com 4 cadeiras cada. Quantas cadeiras precisamos?', g:8,p:4,kind:'box',unit:'cadeiras'},
+    {text:'Cada caixa tem 4 sucos. A cantina mandou 6 caixas. Quantos sucos temos?', g:6,p:4,kind:'bottle',unit:'sucos'},
+    {text:'Cada aluno da comissão ganha 4 biscoitos. Quantos biscoitos para 9 alunos?', g:9,p:4,kind:'ball',unit:'biscoitos'}],
+   beats:[['P: 32 cadeiras! Caio, me ajuda a carregar?','C: Já tô indo, professor!'],['B: Suco garantido! 🧃']],
+   win:['C: Lanche pronto! Posso provar um biscoito?','B: Depois, Caio! Agora vamos para o basquete. 🏀'] },
+ { title:'O basquete', scenery:'basquete',
+   intro:['P: No basquete, cada time tem 5 jogadores em quadra.','C: E eu sou o armador!'],
+   problems:[
+    {text:'Vão jogar 6 times de 5 jogadores. Quantos jogadores ao todo?', g:6,p:5,kind:'person',unit:'jogadores'},
+    {text:'Cada time leva 5 bolas para o aquecimento. Quantas bolas para 8 times?', g:8,p:5,kind:'ball',unit:'bolas'},
+    {text:'Cada tempo do jogo dura 5 minutos. Um jogo com 4 tempos dura quantos minutos?', g:4,p:5,kind:'star',unit:'minutos'}],
+   beats:[['B: 30 jogadores! Vai ser um torneio e tanto.'],['P: Bolas cheias e prontas para o aquecimento!']],
+   win:['P: Torneio de basquete organizado! 🏀','B: Agora, a água para os atletas.'] },
+ { title:'A água', scenery:'volei',
+   intro:['C: Que calor! ☀️','B: Por isso precisamos de muita água. Os fardos vêm com 6 garrafas.'],
+   problems:[
+    {text:'Chegaram 7 fardos com 6 garrafas cada. Quantas garrafas chegaram?', g:7,p:6,kind:'bottle',unit:'garrafas'},
+    {text:'Cada equipe de vôlei tem 6 jogadores. São 5 equipes. Quantos jogadores?', g:5,p:6,kind:'person',unit:'jogadores'},
+    {text:'Vamos pendurar 6 bandeirinhas em cada poste. São 8 postes. Quantas bandeirinhas?', g:8,p:6,kind:'flag',unit:'bandeirinhas'}],
+   beats:[['C: 42 garrafas geladas! Que alívio.'],['P: O vôlei vai bombar! Agora, a decoração.']],
+   win:['B: Quadra decorada! 🎏','P: Agora vamos planejar os treinos.'] },
+ { title:'Os treinos', scenery:'campo',
+   intro:['P: Uma semana tem 7 dias.','P: Antes do grande dia, precisamos treinar!'],
+   problems:[
+    {text:'Faltam 3 semanas para a gincana. Quantos dias faltam?', g:3,p:7,kind:'star',unit:'dias'},
+    {text:'A equipe faz 7 exercícios por dia, durante 6 dias. Quantos exercícios ao todo?', g:6,p:7,kind:'ball',unit:'exercícios'},
+    {text:'No aquecimento, cada fila tem 7 alunos. São 8 filas. Quantos alunos?', g:8,p:7,kind:'person',unit:'alunos'}],
+   beats:[['B: 21 dias! Dá para treinar bastante.'],['C: Isso que é dedicação! 💪']],
+   win:['P: Treinos planejados!','B: Próximo passo: a arquibancada.'] },
+ { title:'A arquibancada', scenery:'arquibancada',
+   intro:['B: As famílias vão assistir à gincana!','P: Cada fileira da arquibancada tem 8 lugares.'],
+   problems:[
+    {text:'São 6 fileiras com 8 lugares cada. Quantos lugares no total?', g:6,p:8,kind:'box',unit:'lugares'},
+    {text:'O 6º ano fez 7 cartazes, cada um com 8 estrelas. Quantas estrelas foram desenhadas?', g:7,p:8,kind:'star',unit:'estrelas'},
+    {text:'Cada caixa tem 8 medalhas. Recebemos 9 caixas. Quantas medalhas?', g:9,p:8,kind:'medal',unit:'medalhas'}],
+   beats:[['C: 48 lugares! Minha avó vai sentar na frente.'],['B: Os cartazes ficaram lindos!']],
+   win:['P: Medalha para todo mundo! 🥇','C: Agora é o cabo de guerra!'] },
+ { title:'O cabo de guerra', scenery:'cabo',
+   intro:['C: No cabo de guerra, cada equipe tem 9 alunos puxando a corda!','B: Haja braço!'],
+   problems:[
+    {text:'São 4 equipes de 9 alunos. Quantos alunos vão puxar a corda?', g:4,p:9,kind:'person',unit:'alunos'},
+    {text:'Cada rodada vencida vale 9 pontos. Minha equipe venceu 7 rodadas. Quantos pontos fizemos?', g:7,p:9,kind:'star',unit:'pontos'},
+    {text:'No lanche final, cada mesa recebe 9 frutas. São 8 mesas. Quantas frutas?', g:8,p:9,kind:'ball',unit:'frutas'}],
+   beats:[['P: 36 alunos prontos. Segurem firme!'],['B: 63 pontos! Estamos na liderança!']],
+   win:['C: Ganhamos o cabo de guerra!','P: Falta a contagem final dos pontos.'] },
+ { title:'A contagem', scenery:'placar',
+   intro:['P: Hora de somar os pontos da gincana!','P: Cada prova vencida vale 10 pontos.'],
+   problems:[
+    {text:'O 6º A venceu 7 provas, e cada uma vale 10 pontos. Quantos pontos o 6º A fez?', g:7,p:10,kind:'star',unit:'pontos'},
+    {text:'O 6º B venceu 8 provas. Quantos pontos o 6º B fez?', g:8,p:10,kind:'star',unit:'pontos'},
+    {text:'E o 6º C venceu 9 provas. Quantos pontos o 6º C fez?', g:9,p:10,kind:'star',unit:'pontos'}],
+   beats:[['B: 70 pontos para o 6º A!'],['C: 80! Tá apertado! 😮']],
+   win:['P: O 6º C é o campeão! 🏆','B: Só falta a cerimônia final… e ela vai precisar de todas as tabuadas!'] },
+ { title:'A cerimônia final', scenery:'cerimonia',
+   intro:['P: Chegou o grande dia da cerimônia! 🎉','B: Vou precisar de todas as tabuadas que você treinou.'],
+   problems:[
+    {text:'Cada uma das 7 equipes recebe 6 medalhas. Quantas medalhas no total?', g:7,p:6,kind:'medal',unit:'medalhas'},
+    {text:'Na arquibancada, são 9 fileiras com 8 pessoas. Quantas pessoas assistiram?', g:9,p:8,kind:'person',unit:'pessoas'},
+    {text:'Para a festa, compramos 8 pacotes com 7 balões cada. Quantos balões?', g:8,p:7,kind:'ball',unit:'balões'}],
+   beats:[['C: Medalhas distribuídas!'],['P: Casa cheia! 👏']],
+   win:['B: A gincana foi um sucesso! 🏆','P: Parabéns! Você é fera na tabuada.','C: Valeu pela ajuda!'] },
+];
+function loseLines(score){
+  return [`B: Fizemos ${score} acertos, mas esta parte precisa de pelo menos ${PASS}.`,'C: Não desista! Vamos tentar de novo? 💪'];
+}
+function parseLine(l){ const m = /^([BCP]):\s*/.exec(l); return m ? {who:m[1], text:l.slice(m[0].length)} : {who:'B', text:l}; }
+
+/* ---------- Cena ---------- */
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.xr.enabled = true;
+renderer.xr.setReferenceSpaceType('local-floor');
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b1730);
+scene.fog = new THREE.Fog(0x0b1730,10,26);
+scene.add(new THREE.HemisphereLight(0xffffff,0x334466,1.6));
+const sun = new THREE.DirectionalLight(0xffffff,1.6); sun.position.set(2,4,3); scene.add(sun);
+
+const camera = new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.05,100);
+function placeCamera(){
+  const portrait = innerWidth/innerHeight < 1;
+  camera.position.set(0,1.6,portrait?3.4:0.7);
+  camera.lookAt(0,1.25,-2.5);
+}
+placeCamera();
+
+scene.add(new THREE.GridHelper(30,30,0x3a7bd5,0x1c3a6b));
+const floor = new THREE.Mesh(new THREE.CircleGeometry(15,48), new THREE.MeshBasicMaterial({color:0x0e2247}));
+floor.rotation.x = -Math.PI/2; floor.position.y = -0.01; scene.add(floor);
+
+// números flutuantes decorativos
+const deco = new THREE.Group(); scene.add(deco);
+const symbols = ['×','2','3','4','5','6','7','8','9','10','=','×','12','24','36','48','56','63','72','81'];
+const decoColors = ['#ffd166','#06d6a0','#4cc9f0','#f72585','#ffffff'];
+symbols.forEach((s,i)=>{
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const x = c.getContext('2d');
+  x.fillStyle = decoColors[i%decoColors.length]; x.font = 'bold 80px system-ui'; x.textAlign='center'; x.textBaseline='middle';
+  x.fillText(s,64,68);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.9,0.9), new THREE.MeshBasicMaterial({map:t,transparent:true,opacity:0.45,depthWrite:false}));
+  const ang = (i/symbols.length)*Math.PI*2, r = 11 + (i%3);
+  m.position.set(Math.cos(ang)*r, 2.5 + (i%4)*1.0, Math.sin(ang)*r);
+  m.lookAt(0,m.position.y,0);
+  m.userData.phase = i; m.renderOrder = -1;
+  deco.add(m);
+});
+
+/* ---------- Canvas: painéis, texto, botões ---------- */
+function makePlane(w,h,px=512){
+  const c = document.createElement('canvas');
+  c.width = px; c.height = Math.round(px*h/w);
+  const ctx = c.getContext('2d');
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w,h), new THREE.MeshBasicMaterial({map:tex,transparent:true}));
+  return {mesh,c,ctx,tex};
+}
+function rrect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+function fitText(ctx,text,maxW,size,weight='bold'){
+  let s = size;
+  do { ctx.font = `${weight} ${s}px system-ui, sans-serif`; s -= 2; } while (ctx.measureText(text).width > maxW && s > 10);
+}
+function wrapLines(ctx,text,maxW){
+  const words = text.split(' '), lines = []; let line = '';
+  for (const w of words){
+    const test = line ? line+' '+w : w;
+    if (ctx.measureText(test).width > maxW && line){ lines.push(line); line = w; } else line = test;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+function drawWrapped(ctx,text,cx,cy,maxW,maxH,size,weight='600'){
+  let s = size, lines;
+  do { ctx.font = `${weight} ${s}px system-ui, sans-serif`; lines = wrapLines(ctx,text,maxW); s -= 2; }
+  while (lines.length*(s+2)*1.28 > maxH && s > 18);
+  const lh = (s+2)*1.28, y0 = cy - (lines.length-1)*lh/2;
+  lines.forEach((l,i)=>ctx.fillText(l,cx,y0+i*lh));
+}
+function textPlane(text,w,h,{bg='#0f204b',fg='#ffffff',border=null,px=512,size=0.6}={}){
+  const p = makePlane(w,h,px), {ctx,c,tex} = p;
+  if (bg){ rrect(ctx,4,4,c.width-8,c.height-8,Math.min(30,c.height*0.25)); ctx.fillStyle=bg; ctx.fill(); }
+  if (border){ ctx.lineWidth=6; ctx.strokeStyle=border; ctx.stroke(); }
+  ctx.fillStyle=fg; ctx.textAlign='center'; ctx.textBaseline='middle';
+  fitText(ctx,text,c.width*0.9,Math.round(c.height*size)); ctx.fillText(text,c.width/2,c.height/2+3);
+  tex.needsUpdate = true;
+  return p.mesh;
+}
+
+const buttons = [];
+function makeButton(parent,label,w,h,color,onClick,fontScale=0.48){
+  const p = makePlane(w,h,512);
+  const b = Object.assign(p,{label,color,onClick,hover:false,enabled:true,state:'normal',pulse:0});
+  b.draw = ()=>{
+    const {ctx,c} = b; ctx.clearRect(0,0,c.width,c.height);
+    const fill = b.state==='right' ? '#22c55e' : b.state==='wrong' ? '#ef4444' : b.color;
+    rrect(ctx,6,6,c.width-12,c.height-12,c.height*0.22);
+    ctx.fillStyle = fill; ctx.fill();
+    if (b.hover && b.enabled){ ctx.fillStyle='rgba(255,255,255,0.28)'; ctx.fill(); }
+    ctx.lineWidth = b.hover && b.enabled ? 12 : 6; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+    ctx.fillStyle = '#ffffff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    fitText(ctx,b.label,c.width*0.86,Math.round(c.height*fontScale));
+    ctx.fillText(b.label,c.width/2,c.height/2+4);
+    b.tex.needsUpdate = true;
+  };
+  b.setLabel = (t)=>{ b.label = String(t); b.draw(); };
+  b.draw();
+  b.mesh.userData.button = b;
+  parent.add(b.mesh);
+  buttons.push(b);
+  return b;
+}
+
+/* ---------- Efeitos sonoros ---------- */
+let actx = null;
+function beep(freqs,dur=0.14){
+  try{
+    actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    let t = actx.currentTime;
+    for (const f of freqs){
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = 'triangle'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001,t);
+      g.gain.exponentialRampToValueAtTime(0.25,t+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+      o.connect(g).connect(actx.destination);
+      o.start(t); o.stop(t+dur+0.03);
+      t += dur*0.85;
+    }
+  }catch(e){}
+}
+
+/* =====================================================================
+   MATERIAIS E PERSONAGENS
+   ===================================================================== */
+const matCache = {};
+function mat(c){ return matCache[c] || (matCache[c] = new THREE.MeshLambertMaterial({color:c})); }
+
+function makeKid(o){
+  const skin = mat(o.skin), hair = mat(o.hair), shirt = mat(o.shirt), stripe = mat(o.stripe),
+        bottom = mat(o.bottom), shoe = mat(0x111111), sock = mat(0xffffff);
+  const kid = new THREE.Group();
+  for (const sx of [-1,1]){
+    if (o.pants){
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.068,0.06,0.54,12), bottom); leg.position.set(sx*0.08,0.3,0); kid.add(leg);
+    } else {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.05,0.48,12), skin); leg.position.set(sx*0.08,0.3,0); kid.add(leg);
+      const so = new THREE.Mesh(new THREE.CylinderGeometry(0.056,0.056,0.08,12), sock); so.position.set(sx*0.08,0.1,0); kid.add(so);
+    }
+    const sh = new THREE.Mesh(new THREE.BoxGeometry(0.11,0.06,0.18), shoe); sh.position.set(sx*0.08,0.03,0.03); kid.add(sh);
+  }
+  const hips = new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.18,0.2,16), bottom); hips.position.y = 0.6; kid.add(hips);
+  const torso = new THREE.Group(); torso.position.y = 0.68; kid.add(torso);
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.16,0.26,6,16), shirt); body.position.y = 0.2; torso.add(body);
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.163,0.163,0.05,16), stripe); band.position.y = 0.2; torso.add(band);
+  if (o.whistle){
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.018,0.018,0.05,10), mat(0xd1d5db)); w.rotation.z = Math.PI/2; w.position.set(0,0.3,0.165); torso.add(w);
+  }
+  const arms = [];
+  for (const sx of [-1,1]){
+    const pivot = new THREE.Group(); pivot.position.set(sx*0.21,0.4,0); torso.add(pivot);
+    pivot.add(new THREE.Mesh(new THREE.SphereGeometry(0.06,12,12), shirt));
+    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.042,0.3,4,10), o.longSleeve ? shirt : skin); arm.position.y = -0.2; pivot.add(arm);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.05,12,12), skin); hand.position.y = -0.4; pivot.add(hand);
+    pivot.rotation.z = sx*0.12;
+    arms.push(pivot);
+  }
+  const head = new THREE.Group(); head.position.y = 0.66; torso.add(head);
+  head.add(new THREE.Mesh(new THREE.SphereGeometry(0.17,24,24), skin));
+  const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.182,24,16,0,Math.PI*2,0,Math.PI*(o.hairStyle==='bun'?0.52:0.42)), hair);
+  hairTop.rotation.x = -0.35; hairTop.position.z = -0.01; head.add(hairTop);
+  if (o.hairStyle==='bun'){
+    const bun = new THREE.Mesh(new THREE.SphereGeometry(0.09,16,16), hair); bun.position.set(0,0.12,-0.15); head.add(bun);
+    const tie = new THREE.Mesh(new THREE.TorusGeometry(0.05,0.015,8,16), mat(0xf72585)); tie.position.set(0,0.09,-0.12); tie.rotation.x = 0.9; head.add(tie);
+  }
+  if (o.cap){
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.19,20,12,0,Math.PI*2,0,Math.PI*0.4), mat(o.cap)); cap.rotation.x = -0.15; head.add(cap);
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.015,0.13), mat(o.cap)); visor.position.set(0,0.1,0.19); visor.rotation.x = 0.15; head.add(visor);
+  }
+  for (const sx of [-1,1]){
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.03,12,12), mat(0xffffff)); eye.position.set(sx*0.06,0.02,0.148); head.add(eye);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.017,10,10), mat(0x111111)); pupil.position.set(sx*0.06,0.02,0.175); head.add(pupil);
+    const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.025,10,10), mat(0xc0605a)); cheek.position.set(sx*0.1,-0.04,0.13); cheek.scale.z = 0.4; head.add(cheek);
+  }
+  if (o.mustache){ const mu = new THREE.Mesh(new THREE.BoxGeometry(0.09,0.02,0.02), hair); mu.position.set(0,-0.045,0.165); head.add(mu); }
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.07,0.018,0.01), mat(0x6b1d1d)); mouth.position.set(0,-0.075,0.165); head.add(mouth);
+  const tag = textPlane(o.tag,0.55,0.13,{bg:o.tagColor,px:256,size:0.62});
+  tag.position.set(0,1.62,0); kid.add(tag);
+  kid.scale.setScalar(o.scale||1);
+  kid.userData = {torso,head,arms,mouth,talk:0,jump:0,shake:0,wave:0,sad:0,clap:0};
+  return kid;
+}
+
+const bia = makeKid({skin:0x8d5524,hair:0x1b1410,shirt:0xf4f4f4,stripe:0x1d4ed8,bottom:0x1e3a8a,hairStyle:'bun',tag:'Bia · 6º ano',tagColor:'#f72585'});
+const caio = makeKid({skin:0xc68642,hair:0x2a1a10,shirt:0xf4f4f4,stripe:0x1d4ed8,bottom:0x1e3a8a,hairStyle:'short',tag:'Caio · 6º ano',tagColor:'#d97706',scale:1.02});
+const prof = makeKid({skin:0xe0ac69,hair:0x2b2b2b,shirt:0x2563eb,stripe:0xffffff,bottom:0x1f2937,pants:true,longSleeve:true,hairStyle:'short',cap:0xdc2626,whistle:true,mustache:true,tag:'Prof. Marcos',tagColor:'#16a34a',scale:1.3});
+bia.position.set(-2.0,0,-1.85);
+caio.position.set(-2.85,0,-1.2);
+prof.position.set(2.95,0,-2.15);
+for (const k of [bia,caio,prof]){ k.lookAt(0,0,0.8); scene.add(k); }
+
+const CHARS = {
+  B:{kid:bia,  name:'Bia',          color:'#f72585', pitch:1.35, rate:1.0},
+  C:{kid:caio, name:'Caio',         color:'#d97706', pitch:1.05, rate:1.05},
+  P:{kid:prof, name:'Prof. Marcos', color:'#16a34a', pitch:0.75, rate:0.95},
+};
+
+function animateKid(k,t,dt){
+  const u = k.userData;
+  u.torso.position.y = 0.68 + Math.sin(t*2 + k.position.x)*0.006;
+  if (u.talk>0){ u.talk -= dt; u.mouth.scale.y = 1 + Math.abs(Math.sin(t*18))*3.5; u.head.rotation.z = Math.sin(t*3)*0.05; }
+  else { u.talk = 0; u.mouth.scale.y = 1; u.head.rotation.z *= 0.9; }
+  if (u.jump>0){ u.jump = Math.max(0,u.jump-dt*1.6); k.position.y = Math.sin((1-u.jump)*Math.PI)*0.25; } else k.position.y = 0;
+  if (u.shake>0){ u.shake = Math.max(0,u.shake-dt*1.2); u.head.rotation.y = Math.sin(t*16)*0.35*u.shake; } else u.head.rotation.y *= 0.85;
+  if (u.sad>0){ u.sad -= dt; u.head.rotation.x += (0.35-u.head.rotation.x)*0.1; } else u.head.rotation.x *= 0.9;
+  const [L,R] = u.arms;
+  if (u.wave>0){ u.wave -= dt; R.rotation.z = 2.6 + Math.sin(t*10)*0.35; R.rotation.x = 0; L.rotation.z = u.jump>0 ? -2.4 : -0.12; L.rotation.x = 0; }
+  else if (u.clap>0){ u.clap -= dt; const a = Math.abs(Math.sin(t*12))*0.35; L.rotation.x = R.rotation.x = -1.3; L.rotation.z = -0.1-a; R.rotation.z = 0.1+a; }
+  else if (u.talk>0){ R.rotation.z = 0.47 + Math.sin(t*4)*0.2; R.rotation.x = -0.4; L.rotation.z = -0.12; L.rotation.x *= 0.9; }
+  else { R.rotation.z += (0.12-R.rotation.z)*0.1; R.rotation.x *= 0.9; L.rotation.z += (-0.12-L.rotation.z)*0.1; L.rotation.x *= 0.9; }
+}
+function react(kind){
+  if (kind==='right'){ bia.userData.jump = 1; bia.userData.wave = 1.2; setTimeout(()=>{ caio.userData.jump = 1; },150); prof.userData.clap = 1.4; if (scen.crowd) scen.cheer = 1.8; }
+  else if (kind==='wrong'){ bia.userData.shake = 1; caio.userData.shake = 0.6; }
+  else if (kind==='win'){ for (const k of [bia,caio]){ k.userData.jump = 1; k.userData.wave = 3; } prof.userData.clap = 3; if (scen.crowd) scen.cheer = 3; }
+  else if (kind==='lose'){ bia.userData.sad = 2.5; caio.userData.sad = 2.5; }
+}
+
+// mini-pessoas (cenas e plateia)
+const miniBodyGeo = new THREE.CapsuleGeometry(0.045,0.12,4,8), miniHeadGeo = new THREE.SphereGeometry(0.045,10,10);
+const SKINS = [0x8d5524,0xc68642,0xe0ac69,0x5c3a21,0xf1c27d];
+const ROWC = [0xef4444,0xf59e0b,0x22c55e,0x3b82f6,0xa855f7,0xec4899,0x14b8a6,0xf97316,0x84cc16,0x6366f1];
+function makeMini(color,i=0){
+  const g = new THREE.Group();
+  const b = new THREE.Mesh(miniBodyGeo,mat(color)); b.position.y = 0.105; g.add(b);
+  const h = new THREE.Mesh(miniHeadGeo,mat(SKINS[i%SKINS.length])); h.position.y = 0.26; g.add(h);
+  return g;
+}
+
+/* ---------- Voz (síntese do navegador) ---------- */
+const TTS = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+let voiceOn = true, ptVoice = null, lastSpoken = null, speakTimer = null;
+try{ if (localStorage.getItem('tabvr_voice')==='0') voiceOn = false; }catch(e){}
+function pickVoice(){
+  if (!TTS) return;
+  const vs = speechSynthesis.getVoices();
+  const pt = vs.filter(v=>/^pt[-_]BR/i.test(v.lang));
+  ptVoice = null;
+  for (const re of [/francisca/i,/luciana/i,/maria/i,/google/i,/female|feminina/i]){ ptVoice = pt.find(v=>re.test(v.name)); if (ptVoice) break; }
+  if (!ptVoice) ptVoice = pt[0] || vs.find(v=>/^pt/i.test(v.lang)) || null;
+}
+if (TTS){ pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+const ORD = {1:'primeiro',2:'segundo',3:'terceiro',4:'quarto',5:'quinto',6:'sexto',7:'sétimo',8:'oitavo',9:'nono',10:'décimo'};
+function toSpeech(t){
+  return t.replace(/\p{Extended_Pictographic}|️|‍/gu,'')
+          .replace(/(\d+)º/g,(m,n)=>ORD[n]||m)
+          .replace(/×/g,' vezes ').replace(/=\s*\?/g,'').replace(/=/g,' é ')
+          .replace(/[★☆✓▶👉🔓🔒]/g,'').replace(/\s+/g,' ').trim();
+}
+function speak(text,who='B'){
+  if (!text) return;
+  lastSpoken = {text,who};
+  const ch = CHARS[who] || CHARS.B;
+  for (const k in CHARS) if (k!==who) CHARS[k].kid.userData.talk = 0;
+  const est = 0.6 + text.length*0.06;
+  if (!TTS || !voiceOn){ ch.kid.userData.talk = Math.min(4,est*0.75); return; }
+  clearTimeout(speakTimer);
+  speechSynthesis.cancel();
+  speakTimer = setTimeout(()=>{
+    const u = new SpeechSynthesisUtterance(toSpeech(text));
+    u.lang = 'pt-BR'; if (ptVoice) u.voice = ptVoice;
+    u.rate = ch.rate; u.pitch = ch.pitch; u.volume = 1;
+    u.onend = u.onerror = ()=>{ ch.kid.userData.talk = 0; };
+    ch.kid.userData.talk = Math.min(20,est*2);   // termina antes, no onend
+    speechSynthesis.speak(u);
+  },70);
+}
+function stopSpeech(){ if (TTS){ clearTimeout(speakTimer); speechSynthesis.cancel(); } for (const k in CHARS) CHARS[k].kid.userData.talk = 0; }
+const voiceButtons = [];
+function makeVoiceBtn(parent,x,y=0.82){
+  const b = makeButton(parent,'',0.42,0.16,'#334155',()=>{
+    voiceOn = !voiceOn;
+    try{ localStorage.setItem('tabvr_voice',voiceOn?'1':'0'); }catch(e){}
+    refreshVoiceBtns();
+    if (voiceOn) speak('Voz ligada!'); else stopSpeech();
+  },0.5);
+  b.mesh.position.set(x,y,-1.75); b.mesh.rotation.x = -0.35;
+  voiceButtons.push(b);
+  return b;
+}
+function refreshVoiceBtns(){ voiceButtons.forEach(b=>{ b.color = voiceOn ? '#0f766e' : '#334155'; b.setLabel(voiceOn ? '🔊 Voz' : '🔇 Voz'); }); }
+
+/* ---------- Progresso (salvo neste aparelho) ---------- */
+let bestMem = {}, unlockedMem = 0;
+function getBest(key){ let v = bestMem[key]||0; try{ v = Math.max(v,+(localStorage.getItem('tabvr_'+key)||0)); }catch(e){} return v; }
+function setBest(key,v){ bestMem[key]=v; try{ localStorage.setItem('tabvr_'+key,String(v)); }catch(e){} }
+function getUnlocked(){
+  try{ const v = localStorage.getItem('tabvr_unlocked'); if (v!==null) unlockedMem = Math.max(unlockedMem,+v); }catch(e){}
+  return Math.min(unlockedMem,LAST);
+}
+function setUnlocked(v){ unlockedMem=v; try{ localStorage.setItem('tabvr_unlocked',String(v)); }catch(e){} }
+function resetProgress(){
+  unlockedMem = 0; bestMem = {};
+  try{ for (let i=0;i<PHASES.length;i++) localStorage.removeItem('tabvr_p'+i); localStorage.setItem('tabvr_unlocked','0'); }catch(e){}
+}
+function journeyDone(){ return getBest('p'+LAST) >= PASS; }
+function phaseShort(i){ return PHASES[i] ? `×${PHASES[i]}` : 'Final'; }
+function phaseName(i){ return `Fase ${i+1} · ${CHAPTERS[i].title} (${PHASES[i] ? 'tabuada do '+PHASES[i] : 'misturada'})`; }
+
+const randInt = (a,b)=> a + Math.floor(Math.random()*(b-a+1));
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+/* =====================================================================
+   OBJETOS
+   ===================================================================== */
+const triShape = new THREE.Shape(); triShape.moveTo(-0.035,0.03); triShape.lineTo(0.035,0.03); triShape.lineTo(0,-0.04); triShape.closePath();
+const ITEM = {
+  cone:  {geo:new THREE.ConeGeometry(0.03,0.075,14), color:0xf97316, h:0.075},
+  ball:  {geo:new THREE.SphereGeometry(0.033,14,14), color:0xf59e0b, h:0.066},
+  bottle:{geo:new THREE.CylinderGeometry(0.018,0.022,0.08,12), color:0x38bdf8, h:0.08},
+  box:   {geo:new THREE.BoxGeometry(0.06,0.06,0.06), color:0xa16207, h:0.06},
+  person:{geo:new THREE.CapsuleGeometry(0.02,0.04,4,10), color:0x22c55e, h:0.08},
+  star:  {geo:new THREE.OctahedronGeometry(0.036), color:0xfacc15, h:0.072},
+  medal: {geo:new THREE.CylinderGeometry(0.032,0.032,0.01,18).rotateX(Math.PI/2), color:0xfbbf24, h:0.064},
+  flag:  {geo:new THREE.ShapeGeometry(triShape), color:0xef4444, h:0.07},
+};
+const flagMats = ROWC.map(c=>new THREE.MeshLambertMaterial({color:c,side:THREE.DoubleSide}));
+function makeItem(kind,i=0){
+  const d = ITEM[kind] || ITEM.ball;
+  const m = new THREE.Mesh(d.geo, (kind==='flag'||kind==='ball') ? flagMats[i%flagMats.length] : mat(d.color));
+  if (kind==='person'){ const hd = new THREE.Mesh(new THREE.SphereGeometry(0.018,10,10), mat(0x8d5524)); hd.position.y = 0.05; m.add(hd); }
+  return m;
+}
+
+/* =====================================================================
+   CENÁRIOS
+   ===================================================================== */
+const sceneryGroup = new THREE.Group(); scene.add(sceneryGroup);
+let scen = {name:''};
+function box(w,h,d,c,x,y,z,parent=sceneryGroup){ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(c)); m.position.set(x,y,z); parent.add(m); return m; }
+function cyl(r,h,c,x,y,z,parent=sceneryGroup){ const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,12),mat(c)); m.position.set(x,y,z); parent.add(m); return m; }
+function flat(geo,c,x,z,y=0.004,parent=sceneryGroup){ const m = new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:c,side:THREE.DoubleSide})); m.rotation.x = -Math.PI/2; m.position.set(x,y,z); parent.add(m); return m; }
+function sign(text,w,h,x,y,z,opts={}){ const m = textPlane(text,w,h,Object.assign({px:512},opts)); m.position.set(x,y,z); sceneryGroup.add(m); return m; }
+function bleachers(z0,tiers,width,crowdN){
+  const crowd = [];
+  for (let t=0;t<tiers;t++) box(width,(t+1)*0.4,0.8,t%2?0x64748b:0x475569,0,(t+1)*0.2,z0-t*0.8);
+  for (let t=0;t<tiers;t++){
+    for (let i=0;i<crowdN;i++){
+      if (Math.random()<0.25) continue;
+      const m = makeMini(ROWC[(i+t*3)%ROWC.length],i+t); m.scale.setScalar(1.7);
+      m.position.set(-width/2+0.5+i*(width-1)/(crowdN-1),(t+1)*0.4,z0-t*0.8);
+      m.userData.baseY = m.position.y; m.userData.ph = Math.random()*6;
+      sceneryGroup.add(m); crowd.push(m);
+    }
+  }
+  return crowd;
+}
+function bunting(x0,x1,y,z,n){
+  for (let i=0;i<n;i++){
+    const f = i/(n-1), x = x0+(x1-x0)*f, sag = Math.sin(f*Math.PI)*0.45;
+    const m = new THREE.Mesh(ITEM.flag.geo,flagMats[i%flagMats.length]); m.scale.setScalar(4); m.position.set(x,y-sag,z); sceneryGroup.add(m);
+  }
+}
+const BUILD = {
+  pista(){
+    flat(new THREE.RingGeometry(5.0,6.2,96),0xb45309,0,-3.4);
+    for (const r of [5.3,5.6,5.9]) flat(new THREE.RingGeometry(r-0.015,r+0.015,96),0xffffff,0,-3.4,0.006);
+    const arch = new THREE.Group(); arch.position.set(-5.6,0,-4.5); arch.rotation.y = Math.PI/2; sceneryGroup.add(arch);
+    cyl(0.07,2.8,0xe5e7eb,-1.3,1.4,0,arch); cyl(0.07,2.8,0xe5e7eb,1.3,1.4,0,arch);
+    const ban = textPlane('CHEGADA 🏁',2.9,0.55,{bg:'#dc2626',size:0.6}); ban.position.set(0,2.6,0); arch.add(ban);
+  },
+  cantina(){
+    box(5,1.0,0.7,0x92400e,0,0.5,-8.2); box(5.1,0.06,0.8,0xfef3c7,0,1.03,-8.2);
+    sign('CANTINA DA ESCOLA',3.6,0.6,0,2.2,-8.6,{bg:'#ea580c'});
+    for (const x of [-3.2,0,3.2]){
+      box(1.1,0.05,1.1,0xf8fafc,x,0.74,-6.2); cyl(0.05,0.72,0x94a3b8,x,0.36,-6.2);
+      for (const [dx,dz] of [[0.75,0],[-0.75,0],[0,0.75],[0,-0.75]]) box(0.36,0.44,0.36,0x16a34a,x+dx,0.22,-6.2+dz);
+    }
+  },
+  basquete(){
+    flat(new THREE.PlaneGeometry(9,11),0x9a3412,0,-4.2,0.002);
+    const L = (w,d,x,z)=>flat(new THREE.PlaneGeometry(w,d),0xffffff,x,z,0.005);
+    L(9,0.05,0,1.3); L(9,0.05,0,-9.7); L(0.05,11,-4.5,-4.2); L(0.05,11,4.5,-4.2);
+    flat(new THREE.RingGeometry(1.2,1.26,64),0xffffff,0,-4.2,0.005);
+    cyl(0.08,3.0,0x6b7280,0,1.5,-9.4);
+    box(1.6,1.0,0.06,0xffffff,0,3.0,-9.2);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.25,0.025,8,24),mat(0xf97316)); ring.rotation.x = Math.PI/2; ring.position.set(0,2.75,-8.9); sceneryGroup.add(ring);
+  },
+  volei(){
+    flat(new THREE.PlaneGeometry(8,10),0x1d4ed8,0,-4.5,0.002);
+    cyl(0.06,2.5,0xe5e7eb,-3.6,1.25,-6.6); cyl(0.06,2.5,0xe5e7eb,3.6,1.25,-6.6);
+    const netP = makePlane(7.2,1.0,512);
+    netP.ctx.strokeStyle='rgba(255,255,255,0.85)'; netP.ctx.lineWidth=2;
+    for (let x=0;x<=512;x+=14){ netP.ctx.beginPath(); netP.ctx.moveTo(x,0); netP.ctx.lineTo(x,netP.c.height); netP.ctx.stroke(); }
+    for (let y=0;y<=netP.c.height;y+=14){ netP.ctx.beginPath(); netP.ctx.moveTo(0,y); netP.ctx.lineTo(512,y); netP.ctx.stroke(); }
+    netP.ctx.fillStyle='#fff'; netP.ctx.fillRect(0,0,512,8); netP.tex.needsUpdate=true;
+    netP.mesh.material.side = THREE.DoubleSide; netP.mesh.position.set(0,1.95,-6.6); sceneryGroup.add(netP.mesh);
+    for (const x of [-4.2,4.2]){ box(0.7,0.5,0.45,0x0ea5e9,x,0.25,-4.6); box(0.72,0.08,0.47,0xffffff,x,0.54,-4.6); }
+  },
+  campo(){
+    flat(new THREE.PlaneGeometry(10,12),0x166534,0,-4.5,0.002);
+    flat(new THREE.PlaneGeometry(10,0.06),0xffffff,0,-4.5,0.005);
+    cyl(0.06,2.1,0xffffff,-1.8,1.05,-9.6); cyl(0.06,2.1,0xffffff,1.8,1.05,-9.6);
+    const bar = cyl(0.06,3.6,0xffffff,0,2.1,-9.6); bar.rotation.z = Math.PI/2;
+    for (let i=0;i<6;i++){ const c = makeItem('cone'); c.scale.setScalar(4); c.position.set(-4.2+i*1.7,0.15,-1.6+(i%2)*-0.3); if (Math.abs(c.position.x)>3) sceneryGroup.add(c); }
+  },
+  arquibancada(){
+    scen.crowd = bleachers(-6.6,4,10,11);
+    sign('6º ANO 💙',2.4,0.5,-4.4,3.4,-9.0,{bg:'#2563eb'}); sign('VAI, GINCANA!',2.6,0.5,4.4,3.4,-9.0,{bg:'#db2777'});
+  },
+  cabo(){
+    const g = new THREE.Group(); g.position.set(0,0,-6.6); sceneryGroup.add(g);
+    const rope = cyl(0.035,8.5,0xd6b37a,0,0.75,0,g); rope.rotation.z = Math.PI/2;
+    const fl = new THREE.Mesh(new THREE.PlaneGeometry(0.25,0.35),new THREE.MeshLambertMaterial({color:0xef4444,side:THREE.DoubleSide})); fl.position.set(0,0.55,0); g.add(fl);
+    for (const side of [-1,1]) for (let i=0;i<6;i++){
+      const m = makeMini(side<0?0x3b82f6:0xef4444,i); m.scale.setScalar(2.4);
+      m.position.set(side*(0.9+i*0.55),0,0.15*(i%2?1:-1)); m.rotation.y = side<0 ? Math.PI/2 : -Math.PI/2; m.rotation.z = side*0.25;
+      g.add(m);
+    }
+    flat(new THREE.PlaneGeometry(0.08,2),0xffffff,0,-6.6,0.005);
+    scen.tug = g;
+  },
+  placar(){
+    cyl(0.08,4.4,0x6b7280,-2.1,2.2,-8.4); cyl(0.08,4.4,0x6b7280,2.1,2.2,-8.4);
+    const p = makePlane(4.6,2.0,1024); p.mesh.position.set(0,5.2,-8.4); p.mesh.lookAt(0,1.6,0); sceneryGroup.add(p.mesh);
+    const vals = ['—','—','—'];
+    scen.setScore = (k,v)=>{
+      if (k!=null) vals[k] = String(v);
+      const {ctx,c,tex} = p; ctx.clearRect(0,0,c.width,c.height);
+      ctx.fillStyle='#111827'; rrect(ctx,6,6,c.width-12,c.height-12,30); ctx.fill(); ctx.lineWidth=8; ctx.strokeStyle='#facc15'; ctx.stroke();
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillStyle='#facc15'; ctx.font='bold 70px system-ui'; ctx.fillText('PLACAR DA GINCANA',c.width/2,70);
+      ['6º A','6º B','6º C'].forEach((t,i)=>{
+        const y = 170 + i*100;
+        ctx.textAlign='left'; ctx.fillStyle='#ffffff'; ctx.font='bold 64px system-ui'; ctx.fillText(t,140,y);
+        ctx.textAlign='right'; ctx.fillStyle= vals[i]==='—' ? '#6b7280' : '#4ade80'; ctx.font='bold 72px monospace'; ctx.fillText(vals[i],c.width-140,y);
+      });
+      tex.needsUpdate = true;
+    };
+    scen.setScore();
+  },
+  cerimonia(){
+    const pod = [[-1.1,0.55,0xc0c0c0,'2'],[0,0.85,0xfacc15,'1'],[1.1,0.4,0xcd7f32,'3']];
+    for (const [x,h,c,n] of pod){ box(1.0,h,0.9,c,x,h/2,-6.4); sign(n,0.5,0.5,x,h/2,-5.94,{bg:null,fg:'#111827',size:0.9}); }
+    const cup = new THREE.Group(); cup.position.set(0,0.85,-6.4); sceneryGroup.add(cup);
+    cyl(0.06,0.25,0xfacc15,0,0.12,0,cup); const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.08,0.3,16),mat(0xfacc15)); bowl.position.y = 0.4; cup.add(bowl);
+    scen.cup = cup;
+    scen.crowd = bleachers(-8.4,3,11,12);
+    bunting(-5,5,3.6,-5.4,22);
+  },
+};
+function setScenery(name){
+  if (scen.name === name) return;
+  sceneryGroup.clear();
+  scen = {name};
+  if (BUILD[name]) BUILD[name]();
+}
+function animateScenery(t,dt){
+  if (scen.crowd){
+    const ch = scen.cheer>0; if (ch) scen.cheer -= dt;
+    for (const m of scen.crowd) m.position.y = m.userData.baseY + (ch ? Math.abs(Math.sin(t*9+m.userData.ph))*0.18 : Math.abs(Math.sin(t*1.5+m.userData.ph))*0.02);
+  }
+  if (scen.tug) scen.tug.position.x = Math.sin(t*1.3)*0.18;
+  if (scen.cup) scen.cup.rotation.y += dt;
+}
+
+/* =====================================================================
+   CENA ANIMADA DEPOIS DE CADA ACERTO DA HISTÓRIA
+   g grupos (fileiras coloridas) de p itens entram na quadra.
+   ===================================================================== */
+const rewardGroup = new THREE.Group(); scene.add(rewardGroup);
+const movers = [];
+const ZONES = [-1.95,0,1.95];
+function clearRewards(){ rewardGroup.clear(); movers.length = 0; }
+function easeOutBounce(x){ const n=7.5625,d=2.75; if(x<1/d) return n*x*x; if(x<2/d) return n*(x-=1.5/d)*x+0.75; if(x<2.5/d) return n*(x-=2.25/d)*x+0.9375; return n*(x-=2.625/d)*x+0.984375; }
+function makeBig(kind,r,c){
+  if (kind==='person') return {obj:makeMini(ROWC[r%ROWC.length],r+c), y:0};
+  if (kind==='flag'){
+    const g = new THREE.Group();
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.006,0.006,0.3,6),mat(0xe5e7eb)); pole.position.y = 0.15; g.add(pole);
+    const f = new THREE.Mesh(ITEM.flag.geo,flagMats[r%flagMats.length]); f.scale.setScalar(1.8); f.position.set(0,0.24,0); g.add(f);
+    return {obj:g, y:0};
+  }
+  const s = 2.4, m = makeItem(kind,r); m.scale.setScalar(s);
+  if (kind==='box' || kind==='star') m.rotation.y = 0.5;
+  return {obj:m, y:(ITEM[kind]||ITEM.ball).h*s/2};
+}
+function spawnReward(k,g,p,kind,unit){
+  const cx = ZONES[k], cz = -3.7, dz = 0.2, dx = 0.15;
+  let maxDelay = 0;
+  for (let r=0;r<g;r++){
+    const z = cz + ((g-1)/2 - r)*dz;
+    const strip = flat(new THREE.PlaneGeometry(p*dx+0.06,0.16),ROWC[r%ROWC.length],cx,z,0.006,rewardGroup);
+    strip.material.transparent = true; strip.material.opacity = 0.45;
+    for (let c=0;c<p;c++){
+      const {obj,y} = makeBig(kind,r,c);
+      const to = new THREE.Vector3(cx + (c-(p-1)/2)*dx, y, z);
+      const run = kind==='person';
+      const from = run ? new THREE.Vector3(cx + 5 + Math.random()*0.6, y, z) : new THREE.Vector3(to.x, y + 2.4 + Math.random()*0.6, to.z);
+      obj.position.copy(from);
+      if (run) obj.rotation.y = -Math.PI/2;
+      const delay = r*0.22 + c*0.04;
+      maxDelay = Math.max(maxDelay,delay);
+      obj.userData.mv = {from,to,delay,t:0,run};
+      rewardGroup.add(obj); movers.push(obj);
+    }
+  }
+  const lab = textPlane(`${g} × ${p} = ${g*p} ${unit}`,1.5,0.24,{bg:'#0f204b',border:'#ffd166',size:0.55});
+  lab.position.set(cx,0.12,cz + (g-1)*dz/2 + 0.32); lab.rotation.x = -0.75; lab.visible = false;
+  rewardGroup.add(lab);
+  later(()=>{ lab.visible = true; beep([784,988],0.08); }, (maxDelay+1.3)*1000);
+}
+function animateRewards(dt,t){
+  for (const m of movers){
+    const mv = m.userData.mv;
+    if (mv.t>=1) continue;
+    if (mv.delay>0){ mv.delay -= dt; continue; }
+    mv.t = Math.min(1, mv.t + dt/(mv.run?1.3:0.9));
+    if (mv.run){
+      const e = 1 - Math.pow(1-mv.t,2);
+      m.position.lerpVectors(mv.from,mv.to,e);
+      m.position.y = mv.to.y + Math.abs(Math.sin(mv.t*22))*0.06*(1-mv.t);
+      if (mv.t>=1) m.rotation.y = 0;
+    } else {
+      m.position.x = mv.to.x; m.position.z = mv.to.z;
+      m.position.y = mv.from.y + (mv.to.y - mv.from.y)*easeOutBounce(mv.t);
+    }
+  }
+}
+
+/* ---------- Quadro de grupos (dica após erro) ---------- */
+const arrayGroup = new THREE.Group();
+arrayGroup.position.set(2.05,1.5,-2.0);
+arrayGroup.lookAt(0,1.5,0.6);
+arrayGroup.visible = false;
+scene.add(arrayGroup);
+function showArray(g,p,kind){
+  arrayGroup.clear();
+  const dx = 0.085, rowH = 0.105;
+  const w = Math.max(0.75, p*dx + 0.3), h = g*rowH + 0.22;
+  const bg = makePlane(w,h,512);
+  rrect(bg.ctx,4,4,bg.c.width-8,bg.c.height-8,30); bg.ctx.fillStyle='#0f204b'; bg.ctx.fill();
+  bg.ctx.lineWidth=5; bg.ctx.strokeStyle='#ffd166'; bg.ctx.stroke();
+  bg.ctx.fillStyle='#ffd166'; bg.ctx.textAlign='center'; bg.ctx.textBaseline='middle';
+  fitText(bg.ctx,`${g} grupos de ${p}`,bg.c.width*0.9,Math.round(bg.c.width*0.075));
+  bg.ctx.fillText(`${g} grupos de ${p}`,bg.c.width/2,bg.c.height*(0.09/h)+6);
+  bg.tex.needsUpdate = true;
+  arrayGroup.add(bg.mesh);
+  const top = h/2 - 0.17;
+  for (let r=0;r<g;r++){
+    const y = top - r*rowH;
+    const strip = new THREE.Mesh(new THREE.PlaneGeometry(p*dx+0.04,rowH*0.86), new THREE.MeshBasicMaterial({color:r%2?0x1e3a8a:0x274b9f}));
+    strip.position.set(0.04,y,0.005); arrayGroup.add(strip);
+    const lab = makePlane(0.12,0.07,128);
+    lab.ctx.fillStyle='#a9d8ff'; lab.ctx.font='bold 52px system-ui'; lab.ctx.textAlign='right'; lab.ctx.textBaseline='middle';
+    lab.ctx.fillText(String((r+1)*p),124,40); lab.tex.needsUpdate = true;
+    lab.mesh.position.set(-(p*dx)/2 - 0.04,y,0.01); arrayGroup.add(lab.mesh);
+    for (let c=0;c<p;c++){
+      const m = makeItem(kind,c+r);
+      m.position.set(0.04 - (p-1)*dx/2 + c*dx, y - (kind==='person'?0.015:0), 0.04);
+      if (kind==='box' || kind==='star') m.rotation.y = 0.6;
+      m.userData.spinItem = (kind==='star' || kind==='medal');
+      arrayGroup.add(m);
+    }
+  }
+  arrayGroup.visible = true;
+  arrayGroup.scale.setScalar(0.01); arrayGroup.userData.grow = 0;
+}
+function hideArray(){ arrayGroup.visible = false; }
+
+/* =====================================================================
+   MENU (mapa de fases)
+   ===================================================================== */
+const menuGroup = new THREE.Group(); scene.add(menuGroup);
+const menuTitle = makePlane(2.6,0.8,1024);
+menuTitle.mesh.position.set(0,2.15,-2.2); menuGroup.add(menuTitle.mesh);
+let menuMsgTimer = null;
+function drawMenuTitle(sub, subColor='#dbe9ff'){
+  const u = getUnlocked();
+  if (!sub) sub = journeyDone() ? 'Gincana completa! 🏆 Repita as fases para bater recordes'
+                                : `Fase ${u+1} de ${PHASES.length}: ${CHAPTERS[u].title} · ${PASS} acertos para avançar`;
+  const {ctx,c,tex} = menuTitle; ctx.clearRect(0,0,c.width,c.height);
+  rrect(ctx,8,8,c.width-16,c.height-16,40); ctx.fillStyle='#0f204b'; ctx.fill();
+  ctx.lineWidth=6; ctx.strokeStyle='#4cc9f0'; ctx.stroke();
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle='#ffd166'; ctx.font='bold 88px system-ui'; ctx.fillText('A Gincana da Tabuada',c.width/2,c.height*0.38);
+  ctx.fillStyle=subColor; fitText(ctx,sub,c.width*0.92,42,'600'); ctx.fillText(sub,c.width/2,c.height*0.74);
+  tex.needsUpdate=true;
+}
+function flashMenu(text,color){
+  drawMenuTitle(text,color);
+  clearTimeout(menuMsgTimer);
+  menuMsgTimer = setTimeout(()=>{ if (menuGroup.visible) drawMenuTitle(); },2200);
+}
+const menuColors = ['#2563eb','#7c3aed','#db2777','#ea580c','#16a34a','#0891b2','#ca8a04','#dc2626','#4f46e5','#0f766e'];
+const menuButtons = PHASES.map((n,i)=>{
+  const row = Math.floor(i/5), col = i%5;
+  const b = makeButton(menuGroup,phaseShort(i),0.44,0.3,menuColors[i],()=>{
+    if (i <= getUnlocked()) startGame(i);
+    else { beep([260,200],0.15); react('wrong'); flashMenu(`🔒 Passe da fase ${i} para liberar esta!`,'#fca5a5'); speak(`Essa fase ainda está trancada. Passe da fase ${i} primeiro!`); }
+  },0.42);
+  b.mesh.position.set(-1.0 + col*0.5, 1.55 - row*0.38, -2.0);
+  return b;
+});
+let resetArmed = false, resetTimer = null;
+const resetBtn = makeButton(menuGroup,'Zerar progresso',0.6,0.14,'#334155',()=>{
+  if (!resetArmed){
+    resetArmed = true; resetBtn.color='#b91c1c'; resetBtn.setLabel('Confirmar: zerar?');
+    clearTimeout(resetTimer);
+    resetTimer = setTimeout(()=>{ resetArmed=false; resetBtn.color='#334155'; resetBtn.setLabel('Zerar progresso'); },3000);
+  } else {
+    clearTimeout(resetTimer); resetArmed=false; resetBtn.color='#334155'; resetBtn.setLabel('Zerar progresso');
+    resetProgress(); refreshMenu(); beep([440,330],0.1); react('right');
+    flashMenu('Progresso zerado. Novo jogador, boa sorte!','#4ade80'); speak('Progresso zerado. Novo jogador, boa sorte!','P');
+  }
+},0.5);
+resetBtn.mesh.position.set(0,0.82,-1.75);
+resetBtn.mesh.rotation.x = -0.35;
+makeVoiceBtn(menuGroup,0.62);
+function refreshMenu(){
+  const u = getUnlocked();
+  menuButtons.forEach((b,i)=>{
+    const best = getBest('p'+i);
+    if (i > u){ b.color = '#475569'; b.setLabel('🔒 '+phaseShort(i)); }
+    else { b.color = menuColors[i]; b.setLabel(phaseShort(i) + (best===10 ? ' ★' : best>=PASS ? ' ✓' : ' ▶')); }
+  });
+  drawMenuTitle();
+}
+
+/* =====================================================================
+   JOGO
+   ===================================================================== */
+const gameGroup = new THREE.Group(); scene.add(gameGroup); gameGroup.visible=false;
+const board = makePlane(2.5,1.15,1024);
+board.mesh.position.set(0,2.0,-2.4); gameGroup.add(board.mesh);
+function drawBoard(o){
+  const {ctx,c,tex} = board; ctx.clearRect(0,0,c.width,c.height);
+  const sp = o.speaker ? CHARS[o.speaker] : null;
+  rrect(ctx,8,8,c.width-16,c.height-16,40); ctx.fillStyle='#0f204b'; ctx.fill();
+  ctx.lineWidth=6; ctx.strokeStyle = sp ? sp.color : '#4cc9f0'; ctx.stroke();
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  if (sp){
+    ctx.font='bold 40px system-ui'; const w = ctx.measureText(sp.name).width + 50;
+    rrect(ctx,40,26,w,56,28); ctx.fillStyle=sp.color; ctx.fill();
+    ctx.fillStyle='#fff'; ctx.fillText(sp.name,40+w/2,56);
+  } else if (o.top){
+    ctx.fillStyle='#a9d8ff'; fitText(ctx,o.top,c.width*0.9,34,'600'); ctx.fillText(o.top,c.width/2,54);
+  }
+  ctx.fillStyle='#ffffff';
+  const areaTop = 100, areaBot = o.fb ? c.height-100 : c.height-40;
+  if (o.big){ fitText(ctx,o.text,c.width*0.9,170); ctx.fillText(o.text,c.width/2,(areaTop+areaBot)/2); }
+  else drawWrapped(ctx,o.text,c.width/2,(areaTop+areaBot)/2,c.width*0.88,areaBot-areaTop,58);
+  if (o.fb){ ctx.fillStyle=o.fbColor||'#fff'; fitText(ctx,o.fb,c.width*0.92,44); ctx.fillText(o.fb,c.width/2,c.height-56); }
+  tex.needsUpdate=true;
+}
+
+const answerButtons = [];
+const ansColors = ['#2563eb','#7c3aed','#db2777','#ea580c'];
+[-1.05,-0.35,0.35,1.05].forEach((x,i)=>{
+  const b = makeButton(gameGroup,'?',0.6,0.42,ansColors[i],()=>answer(b),0.6);
+  b.mesh.position.set(x,1.2,-1.85);
+  b.mesh.rotation.y = -x*0.22;
+  answerButtons.push(b);
+});
+const continueBtn = makeButton(gameGroup,'Continuar ▶',0.9,0.32,'#16a34a',()=>advanceDialogue(),0.4);
+continueBtn.mesh.position.set(0,1.2,-1.85);
+const backBtn = makeButton(gameGroup,'← Mapa',0.42,0.16,'#334155',()=>showMenu(),0.5);
+backBtn.mesh.position.set(0,2.72,-2.38);
+const repeatBtn = makeButton(gameGroup,'🔁 Ouvir',0.42,0.16,'#334155',()=>{ if (lastSpoken) speak(lastSpoken.text,lastSpoken.who); },0.5);
+repeatBtn.mesh.position.set(-0.5,2.72,-2.38);
+const gv = makeVoiceBtn(gameGroup,0.5); gv.mesh.position.set(0.5,2.72,-2.38); gv.mesh.rotation.x = 0;
+function setMode(mode){
+  continueBtn.mesh.visible = mode==='dialogue';
+  answerButtons.forEach(b=>b.mesh.visible = mode==='question');
+}
+
+/* ---------- FIM ---------- */
+const endGroup = new THREE.Group(); scene.add(endGroup); endGroup.visible=false;
+const endPanel = makePlane(2.6,1.45,1024);
+endPanel.mesh.position.set(0,2.0,-2.4); endGroup.add(endPanel.mesh);
+const againBtn = makeButton(endGroup,'Repetir fase',0.75,0.3,'#ea580c',()=>startGame(state.phase),0.34);
+const nextBtn  = makeButton(endGroup,'Próxima fase ▶',0.75,0.3,'#16a34a',()=>startGame(state.phase+1),0.32);
+const menuBtn2 = makeButton(endGroup,'Mapa de fases',0.75,0.3,'#2563eb',()=>showMenu(),0.32);
+const repeatBtn2 = makeButton(endGroup,'🔁 Ouvir',0.42,0.16,'#334155',()=>{ if (lastSpoken) speak(lastSpoken.text,lastSpoken.who); },0.5);
+repeatBtn2.mesh.position.set(-0.25,0.68,-1.75); repeatBtn2.mesh.rotation.x = -0.35;
+makeVoiceBtn(endGroup,0.25,0.68);
+function layoutEndButtons(showNext){
+  nextBtn.mesh.visible = showNext;
+  const row = showNext ? [againBtn,nextBtn,menuBtn2] : [againBtn,menuBtn2];
+  const xs = showNext ? [-0.85,0,0.85] : [-0.45,0.45];
+  row.forEach((b,i)=>{ b.mesh.position.set(xs[i],1.0,-1.95); b.mesh.rotation.y = -xs[i]*0.2; });
+}
+
+/* ---------- Confete ---------- */
+const confetti = [];
+const confGeo = new THREE.PlaneGeometry(0.05,0.03);
+function burst(n=140){
+  for (let i=0;i<n;i++){
+    const m = new THREE.Mesh(confGeo,new THREE.MeshBasicMaterial({color:new THREE.Color().setHSL(Math.random(),0.9,0.6),side:THREE.DoubleSide}));
+    m.position.set((Math.random()-0.5)*0.6,2.3,-2.2);
+    m.userData = { v:new THREE.Vector3((Math.random()-0.5)*3.2,Math.random()*2.5+1.5,(Math.random()-0.5)*1.2+0.9),
+                   spin:new THREE.Vector3(Math.random()*9,Math.random()*9,Math.random()*4), life:3.2 };
+    scene.add(m); confetti.push(m);
+  }
+}
+function updateConfetti(dt){
+  for (let i=confetti.length-1;i>=0;i--){
+    const m = confetti[i], u = m.userData;
+    u.v.y -= 3.5*dt; u.v.multiplyScalar(0.985);
+    m.position.addScaledVector(u.v,dt);
+    m.rotation.x += u.spin.x*dt; m.rotation.y += u.spin.y*dt; m.rotation.z += u.spin.z*dt;
+    u.life -= dt;
+    if (u.life<=0 || m.position.y<0){ scene.remove(m); m.material.dispose(); confetti.splice(i,1); }
+  }
+}
+
+/* =====================================================================
+   LÓGICA
+   ===================================================================== */
+const state = {phase:0, steps:[], step:0, lines:[], lineIdx:0, qn:0, score:0, streak:0, bestStreak:0,
+               errors:[], locked:false, failedThis:false, t0:0, timers:[], cur:null};
+function clearTimers(){ state.timers.forEach(clearTimeout); state.timers=[]; }
+function later(fn,ms){ state.timers.push(setTimeout(fn,ms)); }
+
+function buildSteps(i){
+  const ch = CHAPTERS[i], n = PHASES[i];
+  let quick;
+  if (n){
+    const used = new Set(ch.problems.map(p=> p.g===n ? p.p : p.g));
+    const pool = shuffle([1,2,3,4,5,6,7,8,9,10].filter(b=>!used.has(b)));
+    quick = pool.slice(0,7).map(b=>({type:'q',a:n,b}));
+  } else {
+    quick = Array.from({length:7},()=>({type:'q',a:randInt(2,10),b:randInt(2,10)}));
+  }
+  const S = ch.problems.map((p,k)=>Object.assign({type:'story',k},p));
+  return [
+    {type:'say',lines:ch.intro},
+    quick[0],quick[1], S[0], {type:'say',lines:ch.beats[0]},
+    quick[2],quick[3], S[1], {type:'say',lines:ch.beats[1]},
+    quick[4],quick[5],quick[6], S[2],
+    {type:'end',win:ch.win}
+  ];
+}
+function makeOptions(ans,a,b){
+  const cand = new Set([a*(b+1),a*(b-1),(a+1)*b,(a-1)*b,ans+10,ans-10,ans+1,ans-1,a+b]);
+  const list = shuffle([...cand].filter(v=>v>0 && v!==ans));
+  const opts = [ans,...list.slice(0,3)];
+  while (opts.length<4){ const v = ans + randInt(-12,12); if (v>0 && !opts.includes(v)) opts.push(v); }
+  return shuffle(opts);
+}
+
+function showMenu(){
+  clearTimers(); hideArray(); stopSpeech(); clearRewards();
+  refreshMenu();
+  menuGroup.visible=true; gameGroup.visible=false; endGroup.visible=false;
+  setScenery('pista');
+}
+function startGame(i){
+  clearTimers(); hideArray(); clearRewards();
+  Object.assign(state,{phase:i, steps:buildSteps(i), step:0, qn:0, score:0, streak:0, bestStreak:0, errors:[], locked:false, t0:performance.now()});
+  menuGroup.visible=false; endGroup.visible=false; gameGroup.visible=true;
+  scen.name = ''; setScenery(CHAPTERS[i].scenery);   // reconstrói (zera placar/plateia)
+  runStep();
+}
+function runStep(){
+  hideArray();
+  const s = state.steps[state.step];
+  if (!s){ endGame(); return; }
+  state.cur = s;
+  if (s.type==='say') startDialogue(s.lines);
+  else if (s.type==='end') startDialogue(state.score>=PASS ? s.win : loseLines(state.score));
+  else showQuestion(s);
+}
+function nextStep(){ state.step++; runStep(); }
+
+function startDialogue(lines){ state.lines = lines.map(parseLine); state.lineIdx = 0; showLine(); }
+function showLine(){
+  setMode('dialogue');
+  const {who,text} = state.lines[state.lineIdx];
+  const lastLine = state.lineIdx === state.lines.length-1;
+  continueBtn.setLabel(lastLine && state.cur.type==='end' ? 'Ver resultado ▶' : 'Continuar ▶');
+  drawBoard({speaker:who, text});
+  speak(text,who);
+  if (state.cur.type==='end' && lastLine) react(state.score>=PASS ? 'win' : 'lose');
+}
+function advanceDialogue(){
+  if (state.lineIdx < state.lines.length-1){ state.lineIdx++; showLine(); }
+  else nextStep();
+}
+
+function topLine(){ return `${phaseName(state.phase)}  ·  Questão ${state.qn+1}/${TOTAL}  ·  Acertos: ${state.score} (meta ${PASS})`; }
+function curAnswer(s){ return s.type==='q' ? s.a*s.b : s.g*s.p; }
+
+function showQuestion(s){
+  setMode('question');
+  state.locked = false; state.failedThis = false;
+  const ans = curAnswer(s);
+  const opts = s.type==='q' ? makeOptions(ans,s.a,s.b) : makeOptions(ans,s.g,s.p);
+  answerButtons.forEach((btn,i)=>{ btn.state='normal'; btn.enabled=true; btn.value=opts[i]; btn.setLabel(opts[i]); });
+  if (s.type==='q'){
+    drawBoard({top:topLine(), text:`${s.a} × ${s.b} = ?`, big:true});
+    speak(`Quanto é ${s.a} vezes ${s.b}?`,'B');
+  } else {
+    drawBoard({top:topLine(), text:s.text, fb:'🔓 Acerte para liberar a próxima cena', fbColor:'#ffd166'});
+    speak(s.text,'B');
+  }
+}
+
+function answer(btn){
+  if (state.locked || !btn.enabled) return;
+  const s = state.cur, ans = curAnswer(s);
+  const fact = s.type==='q' ? `${s.a} × ${s.b}` : `${s.g} × ${s.p}`;
+  if (btn.value === ans){
+    state.locked = true;
+    if (!state.failedThis){ state.score++; state.streak++; state.bestStreak = Math.max(state.bestStreak,state.streak); }
+    answerButtons.forEach(x=>x.enabled=false);
+    btn.state='right'; btn.pulse=1;
+    answerButtons.forEach(x=>x.draw());
+    react('right'); beep([660,880]);
+    if (s.type==='story'){
+      hideArray();
+      drawBoard({top:topLine(), text:`${fact} = ${ans}`, big:true, fb:`🔓 Cena liberada! ${ans} ${s.unit}`, fbColor:'#4ade80'});
+      speak(`Isso! ${s.g} vezes ${s.p} é ${ans}. Olha a cena!`,'B');
+      spawnReward(s.k,s.g,s.p,s.kind,s.unit);
+      if (scen.setScore) scen.setScore(s.k,ans);
+      later(()=>{ state.qn++; nextStep(); }, 3200);
+    } else {
+      const praise = state.streak>=3 ? `Muito bem! ${state.streak} seguidas! 🔥` : ['Muito bem!','Isso aí!','Correto!','Mandou bem!'][randInt(0,3)];
+      drawBoard({top:topLine(), text:`${fact} = ${ans}`, big:true, fb:praise, fbColor:'#4ade80'});
+      speak(praise,'B');
+      later(()=>{ state.qn++; nextStep(); }, 1100);
+    }
+  } else {
+    state.streak = 0;
+    if (!state.failedThis){ state.failedThis = true; state.errors.push(`${fact} = ${ans}`); }
+    btn.state='wrong'; btn.enabled=false; btn.draw();
+    react('wrong'); beep([300,220],0.18);
+    if (s.type==='q'){
+      state.locked = true;
+      answerButtons.forEach(x=>x.enabled=false);
+      const right = answerButtons.find(x=>x.value===ans); right.state='right'; right.pulse=1;
+      answerButtons.forEach(x=>x.draw());
+      drawBoard({top:topLine(), text:`${fact} = ${ans}`, big:true, fb:`Quase! ${fact} é ${ans}.`, fbColor:'#fca5a5'});
+      speak(`Quase! ${s.a} vezes ${s.b} é ${ans}.`,'B');
+      later(()=>{ state.qn++; nextStep(); },2000);
+    } else {
+      const seq = [1,2,3].map(k=>k*s.p).join(', ');
+      drawBoard({top:topLine(), text:s.text, fb:`Dica: são ${s.g} grupos de ${s.p}. Conte de ${s.p} em ${s.p}: ${seq}… Veja o quadro! 👉`, fbColor:'#fdba74'});
+      speak(`Dica: são ${s.g} grupos de ${s.p}. Conte de ${s.p} em ${s.p}: ${seq}. Olhe o quadro e tente de novo!`,'P');
+      showArray(s.g,s.p,s.kind);
+    }
+  }
+}
+
+function endGame(){
+  const secs = Math.round((performance.now()-state.t0)/1000);
+  const key = 'p'+state.phase;
+  const prev = getBest(key);
+  const newRecord = state.score > prev;
+  if (newRecord) setBest(key,state.score);
+  const passed = state.score >= PASS;
+  let justUnlocked = false;
+  if (passed && state.phase < LAST && state.phase >= getUnlocked()){ setUnlocked(state.phase+1); justUnlocked = true; }
+  const finished = passed && state.phase === LAST;
+  gameGroup.visible=false; endGroup.visible=true;
+  layoutEndButtons(state.phase < LAST && state.phase+1 <= getUnlocked());
+  if (justUnlocked || finished){ beep([523,659,784,1047,1319],0.16); burst(finished?260:140); later(()=>burst(80),700); react('win'); }
+  else if (passed){ beep([523,659,784],0.16); react('right'); }
+  else { beep([523,440,392],0.16); }
+
+  const {ctx,c,tex} = endPanel; ctx.clearRect(0,0,c.width,c.height);
+  rrect(ctx,8,8,c.width-16,c.height-16,40); ctx.fillStyle='#0f204b'; ctx.fill();
+  ctx.lineWidth=6; ctx.strokeStyle='#ffd166'; ctx.stroke();
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  const stars = state.score>=9 ? '★★★' : state.score>=7 ? '★★☆' : state.score>=5 ? '★☆☆' : '☆☆☆';
+  const msg = state.score===10 ? 'Perfeito!' : state.score>=7 ? 'Ótimo trabalho!' : state.score>=5 ? 'Bom! Dá para melhorar.' : 'Continue praticando!';
+  ctx.fillStyle='#a9d8ff'; fitText(ctx,phaseName(state.phase),c.width*0.9,40,'600'); ctx.fillText(phaseName(state.phase),c.width/2,62);
+  ctx.fillStyle='#ffd166'; ctx.font='bold 90px system-ui'; ctx.fillText(stars,c.width/2,145);
+  ctx.fillStyle='#ffffff'; ctx.font='bold 72px system-ui'; ctx.fillText(`${state.score} de ${TOTAL} acertos`,c.width/2,230);
+  ctx.fillStyle='#dbe9ff';
+  const info = `${msg}   Tempo: ${secs}s · Maior sequência: ${state.bestStreak}${newRecord?' · Novo recorde!':''}`;
+  fitText(ctx,info,c.width*0.92,38,'400'); ctx.fillText(info,c.width/2,290);
+  let phaseMsg, phaseColor;
+  if (finished){ phaseMsg = '🏆 Você completou a Gincana da Tabuada!'; phaseColor = '#ffd166'; }
+  else if (justUnlocked){ phaseMsg = `🎉 Fase ${state.phase+2} liberada: ${CHAPTERS[state.phase+1].title}!`; phaseColor = '#4ade80'; }
+  else if (passed){ phaseMsg = 'Fase concluída! ✓'; phaseColor = '#4ade80'; }
+  else { const f = PASS - state.score; phaseMsg = `Faltou ${f} acerto${f>1?'s':''} para passar de fase. Tente de novo!`; phaseColor = '#fdba74'; }
+  ctx.fillStyle = phaseColor; fitText(ctx,phaseMsg,c.width*0.92,46); ctx.fillText(phaseMsg,c.width/2,348);
+  speak(`Você fez ${state.score} de ${TOTAL} acertos. ${phaseMsg}`,'P');
+  if (state.errors.length){
+    ctx.fillStyle='#fca5a5'; ctx.font='600 38px system-ui'; ctx.fillText('Para revisar:',c.width/2,410);
+    ctx.fillStyle='#ffffff'; ctx.font='40px system-ui';
+    state.errors.slice(0,8).forEach((e,i)=>{
+      const col = i%4, row = Math.floor(i/4);
+      ctx.fillText(e, c.width*(0.14 + col*0.24), 468 + row*55);
+    });
+  } else {
+    ctx.fillStyle='#4ade80'; ctx.font='bold 44px system-ui'; ctx.fillText('Nenhum erro!',c.width/2,440);
+  }
+  tex.needsUpdate=true;
+}
+
+/* =====================================================================
+   INTERAÇÃO
+   ===================================================================== */
+const raycaster = new THREE.Raycaster();
+const tmpM = new THREE.Matrix4();
+const controllers = [];
+for (let i=0;i<2;i++){
+  const ctrl = renderer.xr.getController(i);
+  const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(0,0,-1)]);
+  const line = new THREE.Line(geo,new THREE.LineBasicMaterial({color:0x4cc9f0}));
+  line.scale.z = 4; ctrl.add(line);
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(0.015,12,12),new THREE.MeshBasicMaterial({color:0xffffff}));
+  dot.visible=false; scene.add(dot);
+  ctrl.userData = {line,dot,inputSource:null};
+  ctrl.addEventListener('connected',e=>{ ctrl.userData.inputSource = e.data; line.visible = e.data.targetRayMode !== 'gaze'; });
+  ctrl.addEventListener('disconnected',()=>{ ctrl.userData.inputSource=null; });
+  ctrl.addEventListener('selectstart',()=>{
+    setRayFromController(ctrl);
+    const hit = pick();
+    if (hit){ haptic(ctrl); hit.object.userData.button.onClick(); }
+  });
+  scene.add(ctrl);
+  controllers.push(ctrl);
+}
+function haptic(ctrl){
+  try{ const gp = ctrl.userData.inputSource && ctrl.userData.inputSource.gamepad;
+       if (gp && gp.hapticActuators && gp.hapticActuators[0]) gp.hapticActuators[0].pulse(0.6,50); }catch(e){}
+}
+function setRayFromController(ctrl){
+  tmpM.identity().extractRotation(ctrl.matrixWorld);
+  raycaster.ray.origin.setFromMatrixPosition(ctrl.matrixWorld);
+  raycaster.ray.direction.set(0,0,-1).applyMatrix4(tmpM);
+}
+function visibleTree(o){ while(o){ if(!o.visible) return false; o=o.parent; } return true; }
+function pick(){
+  const meshes = buttons.filter(b=>b.enabled && visibleTree(b.mesh)).map(b=>b.mesh);
+  return raycaster.intersectObjects(meshes,false)[0] || null;
+}
+
+const mouse = new THREE.Vector2(); let mouseActive=false;
+renderer.domElement.addEventListener('pointermove',e=>{
+  mouse.set((e.clientX/innerWidth)*2-1, -(e.clientY/innerHeight)*2+1); mouseActive=true;
+});
+renderer.domElement.addEventListener('pointerdown',e=>{
+  if (renderer.xr.isPresenting) return;
+  mouse.set((e.clientX/innerWidth)*2-1, -(e.clientY/innerHeight)*2+1);
+  raycaster.setFromCamera(mouse,camera);
+  const hit = pick();
+  if (hit) hit.object.userData.button.onClick();
+});
+
+const vrbtn = document.getElementById('vrbtn'), msg = document.getElementById('msg');
+let session = null;
+function setNoVR(text){ vrbtn.textContent='VR indisponível aqui'; vrbtn.disabled=true; msg.textContent=text; }
+if ('xr' in navigator){
+  navigator.xr.isSessionSupported('immersive-vr').then(ok=>{
+    if (ok){ vrbtn.textContent='Entrar em VR'; vrbtn.disabled=false; }
+    else setNoVR('Este navegador não tem VR. Abra o link no Meta Quest Browser. Aqui você pode jogar clicando.');
+  }).catch(()=>setNoVR('O VR foi bloqueado nesta janela. No Quest, abra a página diretamente no navegador (ou use o arquivo .html hospedado). Aqui dá para jogar clicando.'));
+} else {
+  setNoVR('Sem suporte a WebXR neste navegador. No Quest, use o Meta Quest Browser. Aqui você pode jogar clicando.');
+}
+vrbtn.addEventListener('click',async()=>{
+  beep([440],0.05);
+  if (session){ session.end(); return; }
+  try{
+    const s = await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor','bounded-floor']});
+    session = s;
+    s.addEventListener('end',()=>{ session=null; vrbtn.textContent='Entrar em VR'; placeCamera(); });
+    await renderer.xr.setSession(s);
+    vrbtn.textContent='Sair do VR';
+  }catch(e){
+    msg.textContent = 'Não foi possível iniciar o VR: ' + (e && e.message ? e.message : e);
+  }
+});
+
+/* ---------- Loop ---------- */
+addEventListener('resize',()=>{
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+  if (!renderer.xr.isPresenting) placeCamera();
+});
+
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(()=>{
+  const dt = Math.min(clock.getDelta(),0.1), t = clock.elapsedTime;
+  deco.rotation.y += dt*0.03;
+  updateConfetti(dt);
+  for (const k of [bia,caio,prof]) animateKid(k,t,dt);
+  animateScenery(t,dt);
+  animateRewards(dt,t);
+  if (arrayGroup.visible){
+    if (arrayGroup.userData.grow < 1){ arrayGroup.userData.grow = Math.min(1,arrayGroup.userData.grow+dt*3); arrayGroup.scale.setScalar(0.01+0.99*arrayGroup.userData.grow); }
+    arrayGroup.children.forEach(m=>{ if (m.userData.spinItem) m.rotation.y += dt*1.5; });
+  }
+
+  const hovered = new Set();
+  if (renderer.xr.isPresenting){
+    for (const ctrl of controllers){
+      if (!ctrl.userData.inputSource){ ctrl.userData.dot.visible=false; continue; }
+      setRayFromController(ctrl);
+      const hit = pick();
+      if (hit){
+        hovered.add(hit.object.userData.button);
+        ctrl.userData.line.scale.z = hit.distance;
+        ctrl.userData.dot.position.copy(hit.point); ctrl.userData.dot.visible=true;
+      } else { ctrl.userData.line.scale.z = 4; ctrl.userData.dot.visible=false; }
+    }
+  } else if (mouseActive){
+    raycaster.setFromCamera(mouse,camera);
+    const hit = pick(); if (hit) hovered.add(hit.object.userData.button);
+    renderer.domElement.style.cursor = hit ? 'pointer' : 'default';
+  }
+  for (const b of buttons){
+    const h = hovered.has(b);
+    if (h !== b.hover){ b.hover = h; b.draw(); }
+    let s = b.hover && b.enabled ? 1.07 : 1;
+    if (b.pulse>0){ b.pulse = Math.max(0,b.pulse-dt*2.5); s += Math.sin(b.pulse*Math.PI)*0.12; }
+    b.mesh.scale.setScalar(s);
+  }
+  renderer.render(scene,camera);
+});
+
+showMenu();
+refreshVoiceBtns();
+bia.userData.wave = 1.5; caio.userData.jump = 1;
+</script>
+</body>
+</html>
